@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DenoisePro v2</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        html,body {
+            background-color: #f8f9fa;
+            height:100%;
+        }
+        .container {
+            margin-top: 50px;
+        }
+        .video-container {
+            display: none; /* Initially hidden */
+            justify-content: space-around;
+            margin-top: 30px;
+        }
+        video {
+            width: 100%;
+            max-width: 480px;
+        }
+        .progress {
+            height: 20px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">DenoisePro</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="container d-flex justify-content-center align-items-center vh-50">
+        <div class="text-center">
+            <h1 class="mb-4">Choose Your Video</h1>
+            <form id="upload-form" enctype="multipart/form-data">
+                <div class="mb-3 d-flex justify-content-center">
+                    <input type="file" name="video" id="video" accept="video/*" required class="text-center">
+                </div>
+                <button type="submit" class="btn btn-primary">Upload Video</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Analysis Modal -->
+    <div class="modal fade" id="analysisModal" tabindex="-1" aria-labelledby="analysisModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="analysisModalLabel">Video Analysis</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <div id="loadingMessage">Loading... Please wait.</div>
+                    <div id="noiseResults" style="display: none;">
+                        <h6>Gaussian Noise: <span id="gaussianNoise"></span>%</h6>
+                        <h6>Salt and Pepper Noise: <span id="saltPepperNoise"></span>%</h6>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button id="denoise-button" type="button" class="btn btn-success" style="display: none;">Denoise Video</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Modal -->
+    <div class="modal fade" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-body text-center">
+                    <h5>Processing...</h5>
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div class="progress mt-3">
+                        <div id="progress-bar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container video-container text-center" id="video-container">
+        <h5>Denoised Video</h5>
+        <div class="row justify-content-center">
+            <div class="col-12 col-md-6 mb-3">
+                <video id="originalVideo" controls class="w-100"></video>
+            </div>
+        </div>
+    </div>
+    
+
+    <footer class="footer bg-dark text-white text-center" style="position: fixed; bottom: 0; width: 100%; margin-bottom: 0; padding: 1rem;">
+        <div class="container">
+            <span>&copy; 2024 DenoisePro. All rights reserved.</span>
+        </div>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            let lastUploadedVideo = '';
+
+            $('#upload-form').on('submit', function(e) {
+                e.preventDefault();
+                let formData = new FormData(this);
+                $.ajax({
+                    type: 'POST',
+                    url: '/upload',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    success: function(response) {
+                        $('#loadingMessage').hide();
+                        $('#gaussianNoise').text(response.gaussian_noise);
+                        $('#saltPepperNoise').text(response.salt_pepper_noise);
+                        $('#noiseResults').show();
+                        $('#denoise-button').show();
+
+                        // Save the last uploaded video name
+                        lastUploadedVideo = $('#video').val().split('\\').pop(); // Extracts the file name
+                        $('#analysisModal').modal('show');
+                    },
+                    error: function() {
+                        alert('Error in uploading video.');
+                    }
+                });
+            });
+
+            $('#denoise-button').on('click', function() {
+                $('#analysisModal').modal('hide');
+                $('#loadingModal').modal('show');
+
+                // Simulate processing video and update progress
+                let progress = 0;
+                const interval = setInterval(() => {
+                    if (progress < 100) {
+                        progress++;
+                        $('#progress-bar').css('width', progress + '%').attr('aria-valuenow', progress);
+                        $('#progress-bar').text(progress + '%');
+                    } else {
+                        clearInterval(interval);
+                        $.ajax({
+                            type: 'POST',
+                            url: '/denoise',
+                            data: { video_name: lastUploadedVideo }, // Send the last uploaded video name
+                            success: function(data) {
+                                $('#loadingModal').modal('hide');
+                                $('#originalVideo').attr('src', data.original);
+                                $('#denoisedVideo').attr('src', data.denoised);
+                                $('#video-container').show(); // Show the video container after processing
+                            },
+                            error: function() {
+                                alert('Error in denoising video.');
+                            }
+                        });
+                    }
+                }, 3200); // Update every 1.2 seconds (2 minutes total to reach 100%)
+            });
+        });
+    </script>
+</body>
+</html>
+
+
+
+
+
